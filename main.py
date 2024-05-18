@@ -9,8 +9,19 @@ import os
 import json
 from geopy.geocoders import Bing
 from dotenv import load_dotenv
+import logging 
 
 load_dotenv()
+
+# configure logging
+logging.basicConfig(level=logging.INFO)
+# set the log file name
+log_file = "app.log"
+# create a file handler
+handler = logging.FileHandler(log_file)
+# create a logging format
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
 
 bing_map_api = os.getenv('BING_MAP_API')
 BASE_URL = os.getenv('BASE_URL')
@@ -20,9 +31,10 @@ def check_server_status():
     try:
         response = requests.get(BASE_URL + "status")
         response.raise_for_status()
+        logging.info("Server status: {}".format(response.json()["status code"]))
         return response.json()["status code"]
     except requests.exceptions.RequestException as e:
-        print("Error fetching server status: {}".format(e))
+        logging.error("Error fetching server status: {}".format(e))
         return None
 
 @st.cache_data
@@ -40,14 +52,17 @@ def crime_overview():
         states.raise_for_status()
         if states.status_code != 200:
             st.error("Error fetching states data: {}".format(states.text))
+            logging.error("Error fetching states data: {}".format(states.text))
             return
         try:
             st.session_state.states = ["All"] +  states.json()['states']
         except KeyError:
             st.error("Error fetching states data: {}".format(states.text))
+            logging.error("Error fetching states data: {}".format(states.text))
             return
     except requests.exceptions.RequestException as e:
         st.error("Error fetching states data: {}".format(e))
+        logging.error("Error fetching states data: {}".format(e))
         return
 
     if 'state_filter' not in st.session_state:
@@ -63,6 +78,7 @@ def crime_overview():
         actors = ["All"] + requests.get(BASE_URL + "actors").json()['actors']
         st.session_state.actors = actors
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching actors data: {}".format(e))
         st.error("Error fetching actors data: {}".format(e))
         return
     actor_filter = st.sidebar.selectbox("Select Actor", actors)
@@ -71,6 +87,7 @@ def crime_overview():
         event_types = ["All"] + requests.get(BASE_URL + "event_types").json()['event_types']
         st.session_state.event_types = event_types
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching event types data: {}".format(e))  
         st.error("Error fetching event types data: {}".format(e))
         return
     event_type_filter = st.sidebar.selectbox("Select Event Type", event_types)
@@ -90,10 +107,12 @@ def crime_overview():
         historical_events = requests.get(BASE_URL + "overview/historical", params={"location": state_filter, "actor1": actor_filter, "event_type": event_type_filter}).json()["data"]
         if not historical_events:
             st.warning("No historical events data available for the selected filters.")
+            logging.warning("No historical events data available for the selected filters.")    
             st.session_state.historical_events = pd.DataFrame()  # Initialize as an empty DataFrame
             return
     except requests.exceptions.RequestException as e:
         st.error("Error fetching historical events data: {}".format(e))
+        logging.error("Error fetching historical events data: {}".format(e))
         return
 
     data = pd.read_json(json.dumps(historical_events))
@@ -113,6 +132,7 @@ def crime_overview():
             most_affected_state = requests.get(BASE_URL + "overview/most_affected_state", params={"actor1": actor_filter, "event_type": event_type_filter}).json()["data"]['state']
             col2.metric("Most Affected State", most_affected_state)
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching ranking data: {}".format(e))
         st.error("Error fetching ranking data: {}".format(e))
         return
 
@@ -120,6 +140,7 @@ def crime_overview():
         most_active_actor = requests.get(BASE_URL + "overview/most_active_actor", params={"location": state_filter, "event_type": event_type_filter}).json()["data"]['actor1']
         col3.metric("Most Active Actor", most_active_actor)
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching most active actor data: {}".format(e))
         st.error("Error fetching most active actor data: {}".format(e))
         return
 
@@ -127,6 +148,7 @@ def crime_overview():
         most_affected_lga = requests.get(BASE_URL + "overview/most_affected_lga", params={"state": state_filter, "actor1": actor_filter, "event_type": event_type_filter}).json()['data']['lga']
         col4.metric("Most Affected LGA", most_affected_lga)
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching most affected LGA data: {}".format(e))
         st.error("Error fetching most affected LGA data: {}".format(e))
         return
 
@@ -186,6 +208,7 @@ def display_country_map():
         if st.checkbox('Show Map'):
             st_folium(nigeria_map, width=1500, height=500)
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching crime events data: {}".format(e))
         st.error("Error fetching crime events data: {}".format(e))
 
 def predict_crime(date, state):
@@ -195,6 +218,7 @@ def predict_crime(date, state):
         data = response.json()["data"]
         return data["crime_prediction"], data["probability"]
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching crime prediction: {}".format(e))
         st.error("Error fetching crime prediction: {}".format(e))
         return None, None
 
@@ -226,6 +250,7 @@ def get_latest_crime(limit=10, state=None, actor1=None):
         response.raise_for_status()
         return response.json()["data"]
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching latest crime incidents: {}".format(e))
         st.error("Error fetching latest crime incidents: {}".format(e))
         return None
 
@@ -306,6 +331,7 @@ def get_crime_change_by_event_type(location, base, reference_date=None):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching crime change by event type: {}".format(e))
         st.error("Error fetching crime change by event type: {}".format(e))
         return None
 
@@ -318,6 +344,7 @@ def get_crime_change_by_actor(location, base, reference_date=None):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching crime change by actor: {}".format(e))
         st.error("Error fetching crime change by actor: {}".format(e))
         return None
 
@@ -332,6 +359,7 @@ def get_crime_change_percentage(location=None, base="year", reference_date=None)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
+        logging.error("Error fetching crime change percentage: {}".format(e))
         st.error("Error fetching crime change percentage: {}".format(e))
         return None
 
@@ -483,6 +511,7 @@ def main():
     status = check_server_status()
     if status != 200:
         st.error("The server is currently down. Please try again later.")
+        logging.error("The server is currently down. Please try again later.")
         return
     
     if page == "Crime Overview":
